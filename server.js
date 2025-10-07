@@ -38,11 +38,10 @@ function getNairobiDateString() {
   const now = new Date();
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
   const nairobiOffset = 3 * 60 * 60 * 1000;
-  const nairobi = new Date(utc + nairobiOffset);
-  return nairobi.toISOString().split("T")[0];
+  return new Date(utc + nairobiOffset).toISOString().split("T")[0];
 }
 
-// Register visitor (optional, still allows userId storage)
+// Optional: register user
 app.post("/api/register", async (req, res) => {
   const userId = uuidv4();
   return res.json({ success: true, userId });
@@ -51,7 +50,6 @@ app.post("/api/register", async (req, res) => {
 // Redirect & track clicks globally
 app.get("/go/:linkId", async (req, res) => {
   const linkId = req.params.linkId;
-  const userId = req.query.userId || "anonymous-" + uuidv4();
   const links = {
     website: "https://primepickstip.onrender.com/",
     apk: "https://median.co/share/rdejjdb#apk",
@@ -62,6 +60,8 @@ app.get("/go/:linkId", async (req, res) => {
   const linkUrl = links[linkId];
   if (!linkUrl) return res.status(404).send("Link not found");
 
+  // Use userId from query or anonymous
+  const userId = req.query.userId || "anonymous-" + uuidv4();
   const date = getNairobiDateString();
 
   try {
@@ -72,14 +72,14 @@ app.get("/go/:linkId", async (req, res) => {
       { upsert: true }
     );
   } catch (e) {
-    // ignore duplicates
+    // Ignore duplicates (one click per link per day per user)
   }
 
-  // Redirect user
+  // Redirect to final link
   res.redirect(linkUrl);
 });
 
-// Global stats
+// Stats endpoint
 app.get("/api/stats", async (req, res) => {
   try {
     const allCounts = await counts.find({}).toArray();
@@ -91,7 +91,7 @@ app.get("/api/stats", async (req, res) => {
   }
 });
 
-// Catch-all for frontend SPA
+// SPA catch-all
 app.get("*", (req,res)=>{
   res.sendFile(path.join(__dirname,"public","index.html"));
 });
