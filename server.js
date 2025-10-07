@@ -42,6 +42,7 @@ function getNairobiDateString() {
 app.post("/api/register", async (req, res) => {
   try {
     const userId = uuidv4();
+    console.log("🆕 New visitor registered:", userId);
     return res.json({ success: true, userId });
   } catch (err) {
     console.error(err);
@@ -51,16 +52,25 @@ app.post("/api/register", async (req, res) => {
 
 // --- Track click ---
 app.post("/api/click", async (req, res) => {
+  console.log("📌 /api/click called:", req.body);
+
   try {
     const { userId, linkId, linkUrl } = req.body;
-    if (!userId || !linkId || !linkUrl) return res.status(400).json({ success:false, message:"Missing parameters" });
+    if (!userId || !linkId || !linkUrl) {
+      console.log("❌ Missing parameters");
+      return res.status(400).json({ success: false, message: "Missing parameters" });
+    }
 
     const date = getNairobiDateString();
 
     try {
       await userClicks.insertOne({ userId, linkId, linkUrl, date, timestamp: new Date() });
+      console.log(`✅ Click stored: ${userId} -> ${linkId}`);
     } catch(e) {
-      if(e.code===11000) return res.json({ success:false, alreadyClicked:true });
+      if(e.code === 11000) {
+        console.log(`⚠️ Already clicked today: ${userId} -> ${linkId}`);
+        return res.json({ success:false, alreadyClicked:true });
+      }
       throw e;
     }
 
@@ -69,24 +79,25 @@ app.post("/api/click", async (req, res) => {
       { $inc: { totalCount: 1 }, $set: { linkUrl } },
       { upsert: true }
     );
+    console.log(`📈 Global count incremented for ${linkId}`);
 
     return res.json({ success:true });
   } catch(err) {
-    console.error(err);
+    console.error("❌ /api/click error:", err);
     return res.status(500).json({ success:false, message:"Server error" });
   }
 });
 
 // --- Global stats ---
-app.get("/api/stats", async (req, res) => {
-  try {
+app.get("/api/stats", async (req,res)=>{
+  try{
     const allCounts = await counts.find({}).toArray();
     const stats = {};
-    allCounts.forEach(c => { stats[c.linkId] = { totalCount: c.totalCount || 0, linkUrl: c.linkUrl }; });
-    return res.json({ success:true, stats });
-  } catch(err) {
+    allCounts.forEach(c => stats[c.linkId] = { totalCount: c.totalCount || 0, linkUrl: c.linkUrl });
+    return res.json({success:true, stats});
+  }catch(err){
     console.error(err);
-    return res.status(500).json({ success:false, message:"Server error" });
+    return res.status(500).json({success:false,message:"Server error"});
   }
 });
 
@@ -95,11 +106,10 @@ app.get("/api/hasClicked", async (req,res)=>{
   try{
     const userId = req.query.userId;
     if(!userId) return res.status(400).json({success:false,message:"userId required"});
-
     const date = getNairobiDateString();
     const clicks = await userClicks.find({ userId, date }).toArray();
     const clickedLinks = clicks.map(c=>c.linkId);
-    return res.json({success:true,clickedLinks});
+    return res.json({success:true, clickedLinks});
   }catch(err){
     console.error(err);
     return res.status(500).json({success:false,message:"Server error"});
