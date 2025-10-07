@@ -1,142 +1,54 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>PrimePicks — Official Links</title>
-
-  <!-- Google Analytics (GA4) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-6BC335GSHF"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-6BC335GSHF');
-  </script>
-
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; background: #f6f7f9; padding: 24px; max-width: 900px; margin:auto; color:#222; }
-    h1 { text-align:center; margin-bottom:20px; }
-    .card { background: #fff; padding: 18px; margin-bottom:16px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.04); }
-    .btn { display:inline-block; background:#0b74da; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:600; }
-    .btn:hover { background:#095ca8; }
-    .disabled { opacity:0.6; pointer-events:none; }
-    .status { margin-top:10px; font-size:0.95rem; color:#444; }
-    footer { text-align:center; margin-top:36px; color:#666; font-size:0.9rem; }
-    .small { font-size:0.9rem; color:#666; }
-  </style>
+<meta charset="UTF-8">
+<title>PrimePicks Links</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{font-family:Arial,sans-serif;text-align:center;padding:50px;}
+button{margin:10px;padding:15px 25px;font-size:16px;cursor:pointer;}
+</style>
 </head>
 <body>
-  <h1>PrimePicks — Official Links</h1>
+<h1>PrimePicks Link Tracker</h1>
 
-  <div class="card">
-    <h3>🌐 Official Website</h3>
-    <a class="btn track-link" data-id="website" data-url="https://primepickstip.onrender.com/" target="_blank" href="https://primepickstip.onrender.com/">Visit Website</a>
-    <div id="status-website" class="status"></div>
-  </div>
-
-  <div class="card">
-    <h3>📱 Download PrimePicks APK</h3>
-    <a class="btn track-link" data-id="apk" data-url="https://median.co/share/rdejjdb#apk" target="_blank" href="https://median.co/share/rdejjdb#apk">Download APK</a>
-    <div id="status-apk" class="status"></div>
-  </div>
-
-  <div class="card">
-    <h3>💬 Join our Telegram Channel</h3>
-    <a class="btn track-link" data-id="telegram" data-url="https://t.me/primepicks254" target="_blank" href="https://t.me/primepicks254">Join Telegram</a>
-    <div id="status-telegram" class="status"></div>
-  </div>
-
-  <div class="card">
-    <h3>👍 Follow our Facebook Page</h3>
-    <a class="btn track-link" data-id="facebook" data-url="https://www.facebook.com/profile.php?id=61581288185889" target="_blank" href="https://www.facebook.com/profile.php?id=61581288185889">Visit Facebook</a>
-    <div id="status-facebook" class="status"></div>
-  </div>
-
-  <p style="text-align:center;margin-top:10px;">
-    <a href="/monitor.html" class="small" target="_blank">📊 View Real-Time Click Stats</a>
-  </p>
-
-  <footer>© 2025 PrimePicks</footer>
+<button data-linkid="website" data-url="https://primepickstip.onrender.com/">Visit Website</button>
+<button data-linkid="apk" data-url="https://median.co/share/rdejjdb#apk">Download APK</button>
+<button data-linkid="telegram" data-url="https://t.me/primepicks254">Telegram</button>
+<button data-linkid="facebook" data-url="https://www.facebook.com/profile.php?id=61581288185889">Facebook</button>
 
 <script>
 (async function(){
-  const API = location.origin + "/api";
+const API = "https://YOUR_RENDER_URL.onrender.com/api"; // replace with live Render URL
 
-  // --- 1. Get or create unique userId ---
-  let userId = localStorage.getItem("pp_userId");
-  if (!userId) {
-    try {
-      const r = await fetch(API + "/register", { method: "POST" });
-      const j = await r.json();
-      userId = j.userId;
-      localStorage.setItem("pp_userId", userId);
-    } catch (err) {
-      // fallback UUID
-      userId = "u-" + Math.random().toString(36).slice(2) + Date.now();
-      localStorage.setItem("pp_userId", userId);
-    }
-  }
+// get/create userId
+let userId = localStorage.getItem("pp_userId");
+if(!userId){
+  const r = await fetch(API + "/register", {method:"POST"});
+  const j = await r.json();
+  userId = j.userId;
+  localStorage.setItem("pp_userId", userId);
+}
 
-  // --- 2. List of all links ---
-  const links = [
-    { id: "website", url: "https://primepickstip.onrender.com/" },
-    { id: "apk", url: "https://median.co/share/rdejjdb#apk" },
-    { id: "telegram", url: "https://t.me/primepicks254" },
-    { id: "facebook", url: "https://www.facebook.com/profile.php?id=61581288185889" }
-  ];
+// click handler
+document.querySelectorAll("button").forEach(btn=>{
+  btn.addEventListener("click", async ()=>{
+    const linkId = btn.dataset.linkid;
+    const linkUrl = btn.dataset.url;
 
-  // --- 3. Function to send click to server ---
-  async function sendClick(userId, linkId, linkUrl) {
-    try {
-      const res = await fetch(API + "/click", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, linkId, linkUrl })
+    try{
+      const resp = await fetch(API + "/click", {
+        method:"POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({userId, linkId, linkUrl})
       });
-      return await res.json();
-    } catch (err) {
-      console.error("sendClick error", err);
-      return { success:false, message:"network error" };
-    }
-  }
-
-  // --- 4. Auto-register a click for all links on page load ---
-  links.forEach(link => {
-    sendClick(userId, link.id, link.url).then(result=>{
-      const status = document.getElementById("status-"+link.id);
-      if(status) {
-        if(result.success){
-          status.textContent = "✅ Click recorded automatically for today!";
-        } else if(result.alreadyClicked){
-          status.textContent = "ℹ️ Already counted today (resets 00:00 Nairobi)";
-        } else {
-          status.textContent = "⚠️ Click not recorded (network/server issue)";
-        }
-      }
-    });
+      const j = await resp.json();
+      console.log("Click response:", j);
+      window.open(linkUrl,"_blank");
+    }catch(err){ console.error(err); }
   });
-
-  // --- 5. Keep manual click for GA tracking and feedback ---
-  document.querySelectorAll(".track-link").forEach(a=>{
-    a.addEventListener("click", e=>{
-      const el = e.currentTarget;
-      const linkId = el.dataset.id;
-      const linkUrl = el.dataset.url;
-
-      // GA event
-      try {
-        gtag('event','link_click',{link_id:linkId,link_url:linkUrl,link_text:el.textContent.trim()});
-      } catch(err){}
-
-      // Optional: feedback to user
-      const status = document.getElementById("status-"+linkId);
-      if(status) status.textContent = "🔹 You clicked manually — thanks!";
-    });
-  });
-
+});
 })();
 </script>
-
 </body>
 </html>
