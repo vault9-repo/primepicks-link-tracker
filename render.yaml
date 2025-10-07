@@ -1,0 +1,13 @@
+cat <<EOF > render.yaml
+services:
+  - type: web
+    name: primepicks-link-tracker
+    env: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: MONGO_URI
+        sync: false
+EOF

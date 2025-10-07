@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>PrimePicks — Official Links</title>
+
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-6BC335GSHF"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-6BC335GSHF');
+  </script>
+
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, Arial, sans-serif;
+      background: #f6f7f9;
+      padding: 24px;
+      max-width: 900px;
+      margin: auto;
+      color: #222;
+    }
+    h1 { text-align: center; margin-bottom: 20px; }
+    .card { background: #fff; padding: 18px; margin-bottom: 16px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+    .btn { display: inline-block; background: #0b74da; color: #fff; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+    .btn:hover { background: #095ca8; }
+    .disabled { opacity: 0.6; pointer-events: none; }
+    .status { margin-top: 10px; font-size: 0.95rem; color: #444; }
+    footer { text-align:center; margin-top: 36px; color:#666; font-size:0.9rem; }
+    .small { font-size: 0.9rem; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>PrimePicks — Official Links</h1>
+
+  <div class="card">
+    <h3>🌐 Official Website</h3>
+    <a class="btn track-link" data-id="website" data-url="https://primepickstip.onrender.com/" target="_blank" href="https://primepickstip.onrender.com/">Visit Website</a>
+    <div id="status-website" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h3>📱 Download PrimePicks APK</h3>
+    <a class="btn track-link" data-id="apk" data-url="https://median.co/share/rdejjdb#apk" target="_blank" href="https://median.co/share/rdejjdb#apk">Download APK</a>
+    <div id="status-apk" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h3>💬 Join our Telegram Channel</h3>
+    <a class="btn track-link" data-id="telegram" data-url="https://t.me/primepicks254" target="_blank" href="https://t.me/primepicks254">Join Telegram</a>
+    <div id="status-telegram" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h3>👍 Follow our Facebook Page</h3>
+    <a class="btn track-link" data-id="facebook" data-url="https://www.facebook.com/profile.php?id=61581288185889" target="_blank" href="https://www.facebook.com/profile.php?id=61581288185889">Visit Facebook</a>
+    <div id="status-facebook" class="status"></div>
+  </div>
+
+  <p style="text-align:center;margin-top:10px;">
+    <a href="/monitor.html" class="small" target="_blank">📊 View Real-Time Click Stats</a>
+  </p>
+
+  <footer>© 2025 PrimePicks</footer>
+
+<script>
+(async function(){
+  const API = location.origin + "/api";
+
+  // Get or create userId
+  let userId = localStorage.getItem("pp_userId");
+  if (!userId) {
+    try {
+      const r = await fetch(API + "/register", { method: "POST" });
+      const j = await r.json();
+      userId = j.userId;
+      localStorage.setItem("pp_userId", userId);
+    } catch (err) {
+      userId = "u-" + Math.random().toString(36).slice(2) + Date.now();
+      localStorage.setItem("pp_userId", userId);
+    }
+  }
+
+  async function sendClick(userId, linkId, linkUrl) {
+    try {
+      const res = await fetch(API + "/click", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, linkId, linkUrl })
+      });
+      return await res.json();
+    } catch (err) {
+      console.error("sendClick error", err);
+      return { success: false, message: "network error" };
+    }
+  }
+
+  function onClickHandler(e) {
+    // this is triggered on click event; let link open in new tab (target="_blank")
+    const el = e.currentTarget;
+    const linkId = el.dataset.id;
+    const linkUrl = el.dataset.url;
+
+    // Send GA event (non-blocking)
+    try {
+      gtag('event', 'link_click', { link_id: linkId, link_url: linkUrl, link_text: el.textContent.trim() });
+    } catch (err) {
+      // ignore GA errors
+    }
+
+    // Send to server (we don't prevent navigation)
+    sendClick(userId, linkId, linkUrl).then(result => {
+      const status = document.getElementById("status-" + linkId);
+      if (!status) return;
+      if (result.success) {
+        status.textContent = "✅ Click recorded — thank you!";
+        el.classList.add("disabled");
+      } else if (result.alreadyClicked) {
+        status.textContent = "ℹ️ You've already clicked this link today (resets at 00:00 Nairobi).";
+        el.classList.add("disabled");
+      } else {
+        status.textContent = "⚠️ Couldn't record click right now. It may be a network or server issue.";
+      }
+    });
+  }
+
+  // Attach handlers
+  document.querySelectorAll(".track-link").forEach(a => {
+    a.addEventListener("click", onClickHandler);
+  });
+
+  // On page load, query /api/stats to see if this user already clicked today for each link
+  // (optional UX: disable buttons locally if records exist server-side)
+  async function updateLocalClickStates() {
+    try {
+      const resp = await fetch(API + "/stats");
+      const j = await resp.json();
+      if (!j.success) return;
+      const stats = j.stats || {};
+      // We can't know per-user clicked state from /stats; but we can optimistically leave this out.
+      // If you want per-user state, implement a /api/hasClicked?userId=... endpoint.
+    } catch (err) { /* ignore */ }
+  }
+  updateLocalClickStates();
+
+})();
+</script>
+</body>
+</html>
