@@ -7,8 +7,8 @@
 <style>
 body { font-family: Arial; text-align:center; padding:50px; background:#f5f5f5;}
 h1 { margin-bottom: 20px; }
-.buttons button { margin:10px; padding:15px 25px; font-size:16px; cursor:pointer; border-radius:8px; border:none; background:#007bff; color:#fff; transition:0.3s; }
-.buttons button:hover{ background:#0056b3; }
+.buttons a { display:inline-block; margin:10px; padding:15px 25px; font-size:16px; cursor:pointer; border-radius:8px; text-decoration:none; background:#007bff; color:#fff; transition:0.3s; }
+.buttons a:hover { background:#0056b3; }
 table { margin: 20px auto; border-collapse: collapse; width:80%; max-width:600px; background:#fff; }
 th, td { border:1px solid #ccc; padding:12px 15px; text-align:center; }
 th { background:#007bff; color:#fff; }
@@ -18,10 +18,10 @@ th { background:#007bff; color:#fff; }
 <h1>PrimePicks Link Tracker</h1>
 
 <div class="buttons">
-  <button data-linkid="website">Visit Website</button>
-  <button data-linkid="apk">Download APK</button>
-  <button data-linkid="telegram">Telegram</button>
-  <button data-linkid="facebook">Facebook</button>
+  <a href="#" data-linkid="website">Visit Website</a>
+  <a href="#" data-linkid="apk">Download APK</a>
+  <a href="#" data-linkid="telegram">Telegram</a>
+  <a href="#" data-linkid="facebook">Facebook</a>
 </div>
 
 <h2>Click Stats (auto-refresh every 5s)</h2>
@@ -34,21 +34,34 @@ th { background:#007bff; color:#fff; }
 
 <script>
 (async function(){
+  // Register or get userId
   let userId = localStorage.getItem("pp_userId");
   if(!userId){
-    const r = await fetch("/api/register",{method:"POST"});
-    const j = await r.json();
-    userId = j.userId;
-    localStorage.setItem("pp_userId", userId);
+    try{
+      const res = await fetch("/api/register",{method:"POST"});
+      const data = await res.json();
+      userId = data.userId;
+      localStorage.setItem("pp_userId", userId);
+    }catch(e){ console.error(e); }
   }
 
-  document.querySelectorAll(".buttons button").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const linkId = btn.dataset.linkid;
-      window.open(`/go/${linkId}?userId=${userId}`,"_blank");
-    });
+  // Map linkIds to redirect URLs
+  const redirectBase = window.location.origin + "/go/";
+  const linkMap = {
+    website: redirectBase + "website",
+    apk: redirectBase + "apk",
+    telegram: redirectBase + "telegram",
+    facebook: redirectBase + "facebook"
+  };
+
+  // Update buttons to use redirect URLs
+  document.querySelectorAll(".buttons a").forEach(a=>{
+    const linkId = a.dataset.linkid;
+    a.href = linkMap[linkId] + "?userId=" + userId;
+    a.target = "_blank";
   });
 
+  // Fetch and update stats every 5s
   async function updateStats(){
     try{
       const r = await fetch("/api/stats");
@@ -57,11 +70,11 @@ th { background:#007bff; color:#fff; }
         const tbody = document.getElementById("stats-body");
         tbody.innerHTML = "";
         ["website","apk","telegram","facebook"].forEach(id=>{
-          const count = j.stats[id]?.totalCount||0;
+          const count = j.stats[id]?.totalCount || 0;
           tbody.innerHTML += `<tr><td>${id}</td><td>${count}</td></tr>`;
         });
       }
-    }catch(err){ console.error(err); }
+    }catch(e){ console.error(e); }
   }
 
   updateStats();
