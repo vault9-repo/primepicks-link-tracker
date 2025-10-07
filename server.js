@@ -1,148 +1,121 @@
-/**
- * server.js
- * Express server for PrimePicks link tracker.
- *
- * Endpoints:
- *  - POST /api/register    -> { userId }
- *  - POST /api/click       -> { success, alreadyClicked?, totalCount? }
- *     body: { userId, linkId, linkUrl }
- *  - GET  /api/stats       -> { success, stats: { <linkId>: { linkUrl, totalCount } } }
- *
- * Serves static files from /public
- */
-
-const express = require("express");
-const cors = require("cors");
-const { MongoClient } = require("mongodb");
-const { v4: uuidv4 } = require("uuid");
-const dotenv = require("dotenv");
+import express from "express";
+import cors from "cors";
+import { MongoClient } from "mongodb";
+import { v4 as uuidv4 } from "uuid";
+import dotenv from "dotenv";
 
 dotenv.config();
 
-const MONGO_URI = process.env.MONGO_URI;
-const PORT = process.env.PORT || 3000;
-
-if (!MONGO_URI) {
-  console.error("Missing MONGO_URI in environment. See .env.example");
-  process.exit(1);
-}
-
 const app = express();
+const PORT = process.env.PORT || 3000;
+const MONGO_URI = process.env.MONGO_URI;
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-const client = new MongoClient(MONGO_URI, {});
+// --- MongoDB setup ---
+const client = new MongoClient(MONGO_URI);
+let db, userClicks, counts;
 
+async function connectDB() {
+  await client.connect();
+  db = client.db("primepicks");
+  userClicks = db.collection("user_clicks");
+  counts = db.collection("counts");
+
+  // Ensure unique index per user per link per day
+  await userClicks.createIndex({ userId: 1, linkId: 1, date: 1 }, { unique: true });
+}
+connectDB().catch(console.error);
+
+// --- Helper: Nairobi date string ---
 function getNairobiDateString() {
-  // Returns YYYY-MM-DD for Africa/Nairobi (local day)
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Nairobi" });
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const nairobiOffset = 3 * 60 * 60 * 1000;
+  const nairobi = new Date(utc + nairobiOffset);
+  return nairobi.toISOString().split("T")[0]; // YYYY-MM-DD
 }
 
-async function start() {
+// --- Register visitor ---
+app.post("/api/register", async (req, res) => {
   try {
-    await client.connect();
-    console.log("Connected to MongoDB");
-
-    const db = client.db("primepicks_linktracker");
-    const userClicks = db.collection("user_clicks");
-    const counts = db.collection("counts");
-
-    // Ensure indexes
-    await userClicks.createIndex({ userId: 1, linkId: 1, date: 1 }, { unique: true });
-    await counts.createIndex({ linkId: 1 }, { unique: true });
-
-    // Register endpoint - returns uuid for the browser if it doesn't have one
-    app.post("/api/register", (req, res) => {
-      const id = uuidv4();
-      return res.json({ userId: id });
-    });
-
-    // Record a click
-    app.post("/api/click", async (req, res) => {
-      try {
-        const { userId, linkId, linkUrl } = req.body || {};
-
-        if (!userId || !linkId || !linkUrl) {
-          return res.status(400).json({ success: false, message: "userId, linkId and linkUrl are required" });
-        }
-
-        const date = getNairobiDateString();
-        const ts = new Date();
-
-        // Try to insert record into user_clicks. Unique index will prevent duplicates.
-        try {
-          await userClicks.insertOne({ userId, linkId, linkUrl, date, ts });
-        } catch (err) {
-          // Duplicate key => user already clicked this link today
-          if (err && err.code === 11000) {
-            return res.json({ success: false, alreadyClicked: true, message: "Already clicked today" });
-          }
-          console.error("user_clicks insert error:", err);
-          return res.status(500).json({ success: false, message: "DB insert error" });
-        }
-
-        // Atomically increment the global count for this link
-        const updateRes = await counts.findOneAndUpdate(
-          { linkId },
-          { $inc: { totalCount: 1 }, $setOnInsert: { linkId, linkUrl, createdAt: ts } },
-          { upsert: true, returnDocument: "after" }
-        );
-
-        const totalCount = updateRes.value ? updateRes.value.totalCount : 1;
-
-        return res.json({ success: true, alreadyClicked: false, totalCount });
-      } catch (err) {
-        console.error("/api/click error:", err);
-        return res.status(500).json({ success: false, message: "Server error" });
-      }
-    });
-
-    // Get stats
-    app.get("/api/stats", async (req, res) => {
-      try {
-        // Optional filter by linkIds comma separated ?links=website,apk
-        const linksQuery = req.query.links;
-        const filter = linksQuery ? { linkId: { $in: linksQuery.split(",") } } : {};
-        const docs = await counts.find(filter).toArray();
-        const stats = {};
-        docs.forEach(d => {
-          stats[d.linkId] = { linkUrl: d.linkUrl, totalCount: d.totalCount || 0, createdAt: d.createdAt };
-        });
-        return res.json({ success: true, stats, fetchedAt: new Date() });
-      } catch (err) {
-        console.error("/api/stats error:", err);
-        return res.status(500).json({ success: false, message: "Server error" });
-      }
-    });
-
-    // Optional: endpoint to view recent click logs (admin) - limited to 200 entries
-    app.get("/api/recent", async (req, res) => {
-      try {
-        const docs = await db.collection("user_clicks")
-          .find({})
-          .sort({ ts: -1 })
-          .limit(200)
-          .toArray();
-        return res.json({ success: true, recent: docs });
-      } catch (err) {
-        console.error("/api/recent error:", err);
-        return res.status(500).json({ success: false, message: "Server error" });
-      }
-    });
-
-    // Start server
-    app.listen(PORT, () => {
-      console.log(`Server started on port ${PORT}`);
-    });
-
+    const userId = uuidv4();
+    return res.json({ success: true, userId });
   } catch (err) {
-    console.error("Failed to start server:", err);
-    process.exit(1);
+    console.error("/api/register error", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
-}
+});
 
-start().catch(err => {
-  console.error(err);
-  process.exit(1);
+// --- Track click ---
+app.post("/api/click", async (req, res) => {
+  try {
+    const { userId, linkId, linkUrl } = req.body;
+    if (!userId || !linkId || !linkUrl) {
+      return res.status(400).json({ success: false, message: "Missing parameters" });
+    }
+
+    const date = getNairobiDateString();
+
+    // Insert into user_clicks (will fail if already clicked today)
+    try {
+      await userClicks.insertOne({ userId, linkId, linkUrl, date, timestamp: new Date() });
+    } catch (e) {
+      // Duplicate key error = already clicked today
+      if (e.code === 11000) {
+        return res.json({ success: false, alreadyClicked: true });
+      }
+      throw e;
+    }
+
+    // Increment global count
+    await counts.updateOne(
+      { linkId },
+      { $inc: { totalCount: 1 }, $set: { linkUrl } },
+      { upsert: true }
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("/api/click error", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// --- Global stats ---
+app.get("/api/stats", async (req, res) => {
+  try {
+    const allCounts = await counts.find({}).toArray();
+    const stats = {};
+    allCounts.forEach(c => {
+      stats[c.linkId] = { totalCount: c.totalCount || 0, linkUrl: c.linkUrl };
+    });
+    return res.json({ success: true, stats });
+  } catch (err) {
+    console.error("/api/stats error", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// --- Which links this user clicked today ---
+app.get("/api/hasClicked", async (req, res) => {
+  try {
+    const userId = req.query.userId;
+    if (!userId) return res.status(400).json({ success: false, message: "userId required" });
+
+    const date = getNairobiDateString();
+    const clicks = await userClicks.find({ userId, date }).toArray();
+    const clickedLinks = clicks.map(c => c.linkId);
+    return res.json({ success: true, clickedLinks });
+  } catch (err) {
+    console.error("/api/hasClicked error", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// --- Start server ---
+app.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });

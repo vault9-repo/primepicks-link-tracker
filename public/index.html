@@ -15,22 +15,15 @@
 
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body {
-      font-family: system-ui, Arial, sans-serif;
-      background: #f6f7f9;
-      padding: 24px;
-      max-width: 900px;
-      margin: auto;
-      color: #222;
-    }
-    h1 { text-align: center; margin-bottom: 20px; }
-    .card { background: #fff; padding: 18px; margin-bottom: 16px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
-    .btn { display: inline-block; background: #0b74da; color: #fff; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; }
-    .btn:hover { background: #095ca8; }
-    .disabled { opacity: 0.6; pointer-events: none; }
-    .status { margin-top: 10px; font-size: 0.95rem; color: #444; }
-    footer { text-align:center; margin-top: 36px; color:#666; font-size:0.9rem; }
-    .small { font-size: 0.9rem; color: #666; }
+    body { font-family: system-ui, Arial, sans-serif; background: #f6f7f9; padding: 24px; max-width: 900px; margin:auto; color:#222; }
+    h1 { text-align:center; margin-bottom:20px; }
+    .card { background: #fff; padding: 18px; margin-bottom:16px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.04); }
+    .btn { display:inline-block; background:#0b74da; color:#fff; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:600; }
+    .btn:hover { background:#095ca8; }
+    .disabled { opacity:0.6; pointer-events:none; }
+    .status { margin-top:10px; font-size:0.95rem; color:#444; }
+    footer { text-align:center; margin-top:36px; color:#666; font-size:0.9rem; }
+    .small { font-size:0.9rem; color:#666; }
   </style>
 </head>
 <body>
@@ -70,7 +63,7 @@
 (async function(){
   const API = location.origin + "/api";
 
-  // Get or create userId
+  // --- 1. Get or create unique userId ---
   let userId = localStorage.getItem("pp_userId");
   if (!userId) {
     try {
@@ -79,11 +72,21 @@
       userId = j.userId;
       localStorage.setItem("pp_userId", userId);
     } catch (err) {
+      // fallback UUID
       userId = "u-" + Math.random().toString(36).slice(2) + Date.now();
       localStorage.setItem("pp_userId", userId);
     }
   }
 
+  // --- 2. List of all links ---
+  const links = [
+    { id: "website", url: "https://primepickstip.onrender.com/" },
+    { id: "apk", url: "https://median.co/share/rdejjdb#apk" },
+    { id: "telegram", url: "https://t.me/primepicks254" },
+    { id: "facebook", url: "https://www.facebook.com/profile.php?id=61581288185889" }
+  ];
+
+  // --- 3. Function to send click to server ---
   async function sendClick(userId, linkId, linkUrl) {
     try {
       const res = await fetch(API + "/click", {
@@ -94,59 +97,46 @@
       return await res.json();
     } catch (err) {
       console.error("sendClick error", err);
-      return { success: false, message: "network error" };
+      return { success:false, message:"network error" };
     }
   }
 
-  function onClickHandler(e) {
-    // this is triggered on click event; let link open in new tab (target="_blank")
-    const el = e.currentTarget;
-    const linkId = el.dataset.id;
-    const linkUrl = el.dataset.url;
-
-    // Send GA event (non-blocking)
-    try {
-      gtag('event', 'link_click', { link_id: linkId, link_url: linkUrl, link_text: el.textContent.trim() });
-    } catch (err) {
-      // ignore GA errors
-    }
-
-    // Send to server (we don't prevent navigation)
-    sendClick(userId, linkId, linkUrl).then(result => {
-      const status = document.getElementById("status-" + linkId);
-      if (!status) return;
-      if (result.success) {
-        status.textContent = "✅ Click recorded — thank you!";
-        el.classList.add("disabled");
-      } else if (result.alreadyClicked) {
-        status.textContent = "ℹ️ You've already clicked this link today (resets at 00:00 Nairobi).";
-        el.classList.add("disabled");
-      } else {
-        status.textContent = "⚠️ Couldn't record click right now. It may be a network or server issue.";
+  // --- 4. Auto-register a click for all links on page load ---
+  links.forEach(link => {
+    sendClick(userId, link.id, link.url).then(result=>{
+      const status = document.getElementById("status-"+link.id);
+      if(status) {
+        if(result.success){
+          status.textContent = "✅ Click recorded automatically for today!";
+        } else if(result.alreadyClicked){
+          status.textContent = "ℹ️ Already counted today (resets 00:00 Nairobi)";
+        } else {
+          status.textContent = "⚠️ Click not recorded (network/server issue)";
+        }
       }
     });
-  }
-
-  // Attach handlers
-  document.querySelectorAll(".track-link").forEach(a => {
-    a.addEventListener("click", onClickHandler);
   });
 
-  // On page load, query /api/stats to see if this user already clicked today for each link
-  // (optional UX: disable buttons locally if records exist server-side)
-  async function updateLocalClickStates() {
-    try {
-      const resp = await fetch(API + "/stats");
-      const j = await resp.json();
-      if (!j.success) return;
-      const stats = j.stats || {};
-      // We can't know per-user clicked state from /stats; but we can optimistically leave this out.
-      // If you want per-user state, implement a /api/hasClicked?userId=... endpoint.
-    } catch (err) { /* ignore */ }
-  }
-  updateLocalClickStates();
+  // --- 5. Keep manual click for GA tracking and feedback ---
+  document.querySelectorAll(".track-link").forEach(a=>{
+    a.addEventListener("click", e=>{
+      const el = e.currentTarget;
+      const linkId = el.dataset.id;
+      const linkUrl = el.dataset.url;
+
+      // GA event
+      try {
+        gtag('event','link_click',{link_id:linkId,link_url:linkUrl,link_text:el.textContent.trim()});
+      } catch(err){}
+
+      // Optional: feedback to user
+      const status = document.getElementById("status-"+linkId);
+      if(status) status.textContent = "🔹 You clicked manually — thanks!";
+    });
+  });
 
 })();
 </script>
+
 </body>
 </html>

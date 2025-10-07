@@ -1,85 +1,71 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Monitor — PrimePicks Link Tracker</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; padding: 20px; max-width: 900px; margin:auto; color:#222; }
-    h1 { text-align:center; }
-    .small { color:#666; font-size:0.95rem; text-align:center; margin-bottom:10px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 6px rgba(0,0,0,0.04); }
-    th, td { text-align:left; padding: 12px 14px; border-bottom: 1px solid #f0f0f0; }
-    th { background:#fafafa; font-weight:600; }
-    tr:last-child td { border-bottom: none; }
-    .link { color:#0b74da; text-decoration:none; }
-    .count { font-weight:700; }
-    .meta { color:#666; font-size:0.9rem; }
-  </style>
-</head>
-<body>
-  <h1>Real-time Monitor</h1>
-  <div class="small">Auto updates every 5 seconds (Africa/Nairobi daily lock)</div>
+<script>
+const API = "/api";
 
-  <table id="statsTable" role="table" aria-label="Click stats">
-    <thead>
-      <tr><th>Link</th><th>Link URL</th><th>Total Clicks</th></tr>
-    </thead>
-    <tbody>
-      <tr><td colspan="3" class="meta">Loading...</td></tr>
-    </tbody>
-  </table>
+async function renderStats() {
+  try {
+    const userId = localStorage.getItem("pp_userId") || null;
 
-  <script>
-    const API = "/api/stats";
+    // Fetch global stats
+    const statsResp = await fetch(API + "/stats");
+    const statsData = await statsResp.json();
+    const stats = statsData.stats || {};
 
-    async function renderStats() {
+    // Fetch which links current user clicked today
+    let clickedLinks = [];
+    if (userId) {
       try {
-        const r = await fetch(API);
-        const j = await r.json();
-        const tbody = document.querySelector("#statsTable tbody");
-        tbody.innerHTML = "";
-        if (!j.success) {
-          tbody.innerHTML = "<tr><td colspan='3'>Failed to fetch stats</td></tr>";
-          return;
-        }
-        const stats = j.stats || {};
-        const entries = Object.entries(stats);
-        if (entries.length === 0) {
-          tbody.innerHTML = "<tr><td colspan='3'>No data yet</td></tr>";
-          return;
-        }
-        // Sort by totalCount desc
-        entries.sort((a,b) => (b[1].totalCount || 0) - (a[1].totalCount || 0));
-        entries.forEach(([linkId, info]) => {
-          const tr = document.createElement("tr");
-          const tdLinkId = document.createElement("td");
-          tdLinkId.textContent = linkId;
-
-          const tdUrl = document.createElement("td");
-          const a = document.createElement("a");
-          a.href = info.linkUrl;
-          a.target = "_blank";
-          a.className = "link";
-          a.textContent = info.linkUrl;
-          tdUrl.appendChild(a);
-
-          const tdCount = document.createElement("td");
-          tdCount.className = "count";
-          tdCount.textContent = info.totalCount || 0;
-
-          tr.appendChild(tdLinkId);
-          tr.appendChild(tdUrl);
-          tr.appendChild(tdCount);
-          tbody.appendChild(tr);
-        });
-      } catch (err) {
-        console.error("renderStats error", err);
-      }
+        const resp = await fetch(API + "/hasClicked?userId=" + userId);
+        const j = await resp.json();
+        if (j.success) clickedLinks = j.clickedLinks;
+      } catch(err) { console.error("hasClicked error", err); }
     }
 
-    renderStats();
-    setInterval(renderStats, 5000);
-  </script>
-</body>
-</html>
+    const tbody = document.querySelector("#statsTable tbody");
+    tbody.innerHTML = "";
+
+    const entries = Object.entries(stats);
+    if(entries.length === 0) {
+      tbody.innerHTML = "<tr><td colspan='4'>No data yet</td></tr>";
+      return;
+    }
+
+    // Sort by totalCount descending
+    entries.sort((a,b)=> (b[1].totalCount||0) - (a[1].totalCount||0));
+
+    entries.forEach(([linkId, info])=>{
+      const tr = document.createElement("tr");
+
+      const tdId = document.createElement("td");
+      tdId.textContent = linkId;
+
+      const tdUrl = document.createElement("td");
+      const a = document.createElement("a");
+      a.href = info.linkUrl;
+      a.target = "_blank";
+      a.textContent = info.linkUrl;
+      tdUrl.appendChild(a);
+
+      const tdCount = document.createElement("td");
+      tdCount.className = "count";
+      tdCount.textContent = info.totalCount || 0;
+
+      const tdUser = document.createElement("td");
+      tdUser.textContent = clickedLinks.includes(linkId) ? "✅ You clicked today" : "—";
+
+      tr.appendChild(tdId);
+      tr.appendChild(tdUrl);
+      tr.appendChild(tdCount);
+      tr.appendChild(tdUser);
+
+      tbody.appendChild(tr);
+    });
+
+  } catch(err) {
+    console.error("renderStats error", err);
+  }
+}
+
+// Auto-refresh every 5 seconds
+renderStats();
+setInterval(renderStats, 5000);
+</script>
