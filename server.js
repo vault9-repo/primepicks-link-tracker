@@ -19,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// MongoDB setup
+// --- MongoDB Setup ---
 const client = new MongoClient(MONGO_URI);
 let db, userClicks, counts;
 
@@ -28,26 +28,30 @@ async function connectDB() {
   db = client.db("primepicks");
   userClicks = db.collection("user_clicks");
   counts = db.collection("counts");
-  await userClicks.createIndex({ userId: 1, linkId: 1, date: 1 }, { unique: true });
+  await userClicks.createIndex(
+    { userId: 1, linkId: 1, date: 1 },
+    { unique: true }
+  );
   console.log("✅ MongoDB connected");
 }
 connectDB().catch(console.error);
 
-// Nairobi date helper
+// --- Helper: Nairobi Date ---
 function getNairobiDateString() {
   const now = new Date();
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
   const nairobiOffset = 3 * 60 * 60 * 1000;
-  return new Date(utc + nairobiOffset).toISOString().split("T")[0];
+  const nairobi = new Date(utc + nairobiOffset);
+  return nairobi.toISOString().split("T")[0];
 }
 
-// Optional: register user
+// --- Register visitor ---
 app.post("/api/register", async (req, res) => {
   const userId = uuidv4();
   return res.json({ success: true, userId });
 });
 
-// Redirect & track clicks globally
+// --- Redirect & track clicks globally ---
 app.get("/go/:linkId", async (req, res) => {
   const linkId = req.params.linkId;
   const links = {
@@ -60,7 +64,6 @@ app.get("/go/:linkId", async (req, res) => {
   const linkUrl = links[linkId];
   if (!linkUrl) return res.status(404).send("Link not found");
 
-  // Use userId from query or anonymous
   const userId = req.query.userId || "anonymous-" + uuidv4();
   const date = getNairobiDateString();
 
@@ -72,14 +75,13 @@ app.get("/go/:linkId", async (req, res) => {
       { upsert: true }
     );
   } catch (e) {
-    // Ignore duplicates (one click per link per day per user)
+    // Ignore duplicates (already clicked today)
   }
 
-  // Redirect to final link
   res.redirect(linkUrl);
 });
 
-// Stats endpoint
+// --- Global stats ---
 app.get("/api/stats", async (req, res) => {
   try {
     const allCounts = await counts.find({}).toArray();
@@ -91,9 +93,9 @@ app.get("/api/stats", async (req, res) => {
   }
 });
 
-// SPA catch-all
+// --- SPA catch-all ---
 app.get("*", (req,res)=>{
   res.sendFile(path.join(__dirname,"public","index.html"));
 });
 
-app.listen(PORT, ()=>console.log(`✅ Server running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
